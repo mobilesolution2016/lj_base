@@ -27,6 +27,15 @@ local mergePath = function(self)
 	return table.concat(pathsegs, '/')
 end
 
+local filename
+if ffi.os == 'Windows' then
+	filename = package.searchpath('.\\strext', '?.dll', '')
+else
+	filename = package.searchpath('./libstrext', '?.dylib;?.so;', '')
+end
+libstrext = ffi.load(filename)
+assert(libstrext, 'strext module load failed')
+
 ffi.cdef[[
 	typedef struct _LocalDateTime
 	{
@@ -215,10 +224,10 @@ else
 		unsigned getpathattrs(const char* path);
 	]]
 
-	local readdirinfo = _G.libreemext.readdirinfo
-	local getpathattrs = _G.libreemext.getpathattrs
-	local pathisexists = _G.libreemext.pathisexists
-	local createdir = _G.libreemext.createdir
+	local readdirinfo = libstrext.readdirinfo
+	local getpathattrs = libstrext.getpathattrs
+	local pathisexists = libstrext.pathisexists
+	local createdir = libstrext.createdir
 	
 	local FILE = 1
 	local DIR = 2
@@ -250,8 +259,8 @@ else
 		end,
 	}
 	
-	_isFile = _G.libreemext.pathisfile
-	_isDir = _G.libreemext.pathisdir
+	_isFile = libstrext.pathisfile
+	_isDir = libstrext.pathisdir
 	_isExists = function(path)
 		local r = pathisexists(path)
 		if r ~= 0 then
@@ -335,8 +344,8 @@ else
 	end
 end
 
-local _getFileSize = _G.libreemext.getFileSize
-local _getFileTime = _G.libreemext.getFileTime
+local _getFileSize = libstrext.getFileSize
+local _getFileTime = libstrext.getFileTime
 local createTime, updateTime = ffi.new('LocalDateTime'), ffi.new('LocalDateTime')
 
 return {

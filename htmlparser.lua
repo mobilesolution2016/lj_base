@@ -213,6 +213,27 @@ local GUMBO_NODE_CDATA		= tonumber(libgumbo.GUMBO_NODE_CDATA)
 local GUMBO_NODE_COMMENT	= tonumber(libgumbo.GUMBO_NODE_COMMENT)
 local GUMBO_NODE_WHITESPACE = tonumber(libgumbo.GUMBO_NODE_WHITESPACE)
 
+local nodeMeta = {
+	__index = {
+		prevSibling = function(self)
+			local p = self.parent
+			if p then
+				local id = self.nodeIndex - 1
+				if id > 0 then
+					return p[id]
+				end
+			end
+		end,
+
+		nextSibling = function(self)			
+			local p, id = self.parent, self.nodeIndex + 1
+			if p and id <= #p then
+				return p[id]
+			end
+		end,
+	}
+}
+
 local function transform_gumbo_node_to_lom_node(gumbo_node, luaQuery, level)
 	local node_type = tonumber(gumbo_node.type)
 
@@ -223,7 +244,7 @@ local function transform_gumbo_node_to_lom_node(gumbo_node, luaQuery, level)
 		local attributes = ffi.cast('GumboAttribute**', element.attributes.data)
 		local children = ffi.cast('GumboNode**', element.children.data)
 
-		local node = {}
+		local node = setmetatable({}, nodeMeta)
 		node.tag = ffi.string(libgumbo.gumbo_normalized_tagname(element.tag))
 		if node.tag == '' then
 			libgumbo.gumbo_tag_from_original_text(element.original_tag)
@@ -288,6 +309,7 @@ local function transform_gumbo_node_to_lom_node(gumbo_node, luaQuery, level)
 			local childNode = transform_gumbo_node_to_lom_node(children[i], luaQuery, level + 1)
 			if childNode then
 				childNode.parent = node
+				childNode.nodeIndex = i + 1
 				table.insert(node, childNode)
 			end
 		end
@@ -297,7 +319,13 @@ local function transform_gumbo_node_to_lom_node(gumbo_node, luaQuery, level)
 	elseif node_type == GUMBO_NODE_COMMENT then
 		return nil
 	else
-		return { tag = '#text', text = ffi.string(gumbo_node.v.text.text) }
+		local txt = gumbo_node.v.text.text
+		if txt then
+			txt = string.trim(ffi.string(txt))
+			if #txt > 0 then
+				return { tag = '#text', text = txt }
+			end
+		end
 	end
 end
 
@@ -636,12 +664,12 @@ queryMeta.__call = function(self, a, b)
 		return self:find(a)
 
 	elseif type(a) == 'table' then
-		if #a > 0 and not getmetatable(a) then
+		if #a > 0 then
 			if a[1].tag and a[1].attr then
-				return setmetatable(sets, getmetatable(self))
+				return setmetatable({ a[1] }, getmetatable(self))
 			end
 		elseif a.tag and a.attr then
-			return 
+			return setmetatable({ a }, getmetatable(self))
 		end
 	end
 end
@@ -669,8 +697,9 @@ gumbo.parse = function(input, createQuery)
 		}
 	end
 
-	local root = transform_gumbo_node_to_lom_node(output.root, luaQuery.__index, 1)
+	local root = transform_gumbo_node_to_lom_node(output.root, luaQuery and luaQuery.__index or nil, 1)
 	libgumbo.gumbo_destroy_output(libgumbo.kGumboDefaultOptions, output)
+	root.nodeIndex = 1
 	output = nil
 
 	if luaQuery then

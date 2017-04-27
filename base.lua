@@ -16,11 +16,15 @@ if ffi.os == 'Windows' then
 		int access(const char *, int) __asm__("_access");
 		
 		unsigned __stdcall GetCurrentThreadId();
+		void __stdcall Sleep(unsigned dwMilliseconds);
 	]]
 	
 	local kernel32 = ffi.load('kernel32.dll')
 	_G.os.threadId = function()
 		return kernel32.GetCurrentThreadId()
+	end
+	_G.os.sleep = function(millisecs)
+		return kernel32.Sleep(millisecs)
 	end
 else
 	ffi.cdef [[
@@ -32,10 +36,14 @@ else
 		int access(const char *, int);
 		
 		unsigned long pthread_self();
+		void usleep(size_t usecs);
 	]]	
 
 	_G.os.threadId = function()
 		return ffi.C.pthread_self()
+	end
+	_G.os.sleep = function(millisecs)
+		return kernel32.usleep(millisecs * 1000)
 	end
 end
 
