@@ -53,6 +53,7 @@ ffi.cdef[[
 if ffi.os == 'Windows' then
 	ffi.cdef[[
 		int PathFileExistsA(const char*);
+		int PathIsFileSpecA(const char*);
 		int PathIsDirectoryA(const char*);
 
 		typedef struct _FILETIME {
@@ -114,18 +115,19 @@ if ffi.os == 'Windows' then
 	}
 
 	_isFile = function(path)
-		return shlwapi.PathFileExistsA(path) ~= 0
+		local f = kernel32.GetFileAttributesA(path)
+		if f ~= 4294967295 and bit.band(f, 0x00000010) == 0 then
+			return true
+		end
 	end
 	_isDir = function(path)
 		return shlwapi.PathIsDirectoryA(path) ~= 0
 	end
 	_isExists = function(path)
-		if shlwapi.PathFileExistsA(path) ~= 0 then
-			return 1
-		end
 		if shlwapi.PathIsDirectoryA(path) ~= 0 then
 			return 2
 		end
+		return _isFile(path)
 	end
 	
 	_getAttr = function(path)
@@ -170,7 +172,7 @@ if ffi.os == 'Windows' then
 		local last = path:sub(#path)
 		local r = { (last == '\\' or last == '/') and path or (path .. '/'), ffi.new('WIN32_FIND_DATAA') }
 
-		r[3] = kernel32.FindFirstFileA(r[1] .. (filter == nil and '*.*' or filter), r[2])
+		r[3] = kernel32.FindFirstFileA(r[1] .. (filter or '*.*'), r[2])
 		if r[3] == nil then
 			r[2] = nil
 			return nil
@@ -181,12 +183,13 @@ if ffi.os == 'Windows' then
 
 	dirt.__index = {
 		pick = function(self)
-			if not self[4] or kernel32.FindNextFileA(self[3], self[2]) ~= 0 then
-				self[4] = ffi.string(self[2].cFileName)
-				self[5] = self[2].dwFileAttributes
-				return true
+			while kernel32.FindNextFileA(self[3], self[2]) ~= 0 do
+				local name = ffi.string(self[2].cFileName)
+				if name ~= '.' and name ~= '..' then
+					self[4], self[5] = name, self[2].dwFileAttributes
+					return true
+				end
 			end
-
 			return false
 		end,
 		close = function(self)
